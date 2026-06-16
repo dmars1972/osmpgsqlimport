@@ -507,13 +507,19 @@ void wayThread(int tid,
                     way_phase_done = true;
                 }
 
-                // Collect member geometries from both ways and areas.
+                // Collect member geometries from both ways and areas via a
+                // single batched query (one round trip per relation instead
+                // of one per member) — this was the dominant cost in the
+                // relations phase for relations with many members.
                 // mergeWayGeoms filters out polygons internally so both
                 // rel_geog and road_geog will only contain linestrings.
+                auto way_geoms_by_id = db.getWays(item.way_members);
                 std::vector<std::string> geoms;
+                geoms.reserve(item.way_members.size());
                 for (int64_t wid : item.way_members) {
-                    std::string g = db.getWay(wid);
-                    if (!g.empty()) geoms.push_back(std::move(g));
+                    auto it = way_geoms_by_id.find(wid);
+                    if (it != way_geoms_by_id.end() && !it->second.empty())
+                        geoms.push_back(it->second);
                 }
                 std::string rel_geog  = geoms.empty() ? "" : mergeWayGeoms(geoms);
                 std::string road_geog = rel_geog;

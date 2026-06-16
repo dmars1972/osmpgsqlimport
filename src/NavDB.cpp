@@ -298,18 +298,27 @@ void NavDB::createGistIndexes() {
 
 // ---- query ----
 
-std::string NavDB::getWay(int64_t id) {
+std::unordered_map<int64_t, std::string> NavDB::getWays(const std::vector<int64_t>& ids) {
+    std::unordered_map<int64_t, std::string> out;
+    if (ids.empty()) return out;
     try {
         pqxx::work txn(*conn_);
+        // ANY($1) against an array param replaces N round trips with one.
+        // A member id may legitimately appear in either my_ways or
+        // my_areas (but not both in practice).
         auto res = txn.exec(
-            "SELECT geog FROM my_ways WHERE id = $1 UNION ALL SELECT geog FROM my_areas WHERE id = $1",
-            pqxx::params{id});
-        if (res.empty() || res[0][0].is_null()) return "";
-        return res[0][0].as<std::string>();
+            "SELECT id, geog FROM my_ways  WHERE id = ANY($1) "
+            "UNION ALL "
+            "SELECT id, geog FROM my_areas WHERE id = ANY($1)",
+            pqxx::params{ids});
+        for (const auto& row : res) {
+            if (row[1].is_null()) continue;
+            out.emplace(row[0].as<int64_t>(), row[1].as<std::string>());
+        }
     } catch (const std::exception& e) {
-        std::cerr << "[NavDB] getWay error: " << e.what() << "\n";
-        return "";
+        std::cerr << "[NavDB] getWays error: " << e.what() << "\n";
     }
+    return out;
 }
 
 // ---- delta / update methods ----

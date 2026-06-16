@@ -107,10 +107,13 @@ std::string DeltaApplier::buildWayGeom(const WayEntry& w, bool& is_closed) {
 }
 
 std::string DeltaApplier::buildRelationGeom(const RelationEntry& r) {
+    auto way_geoms_by_id = db_.getWays(r.way_members);
     std::vector<std::string> geoms;
+    geoms.reserve(r.way_members.size());
     for (int64_t wid : r.way_members) {
-        std::string g = db_.getWay(wid);
-        if (!g.empty()) geoms.push_back(std::move(g));
+        auto it = way_geoms_by_id.find(wid);
+        if (it != way_geoms_by_id.end() && !it->second.empty())
+            geoms.push_back(it->second);
     }
     return mergeLinestrings(geoms);
 }

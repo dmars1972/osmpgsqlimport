@@ -65,7 +65,10 @@ public:
     void finalize_tags(const std::string& table);
 
     // ---- Queries ----
-    std::string getWay(int64_t id);
+    // Batched lookup — one round trip for many IDs instead of one per ID.
+    // Returns a map of id -> geog (WKB hex). IDs with no match (or null
+    // geog) are simply absent from the map.
+    std::unordered_map<int64_t, std::string> getWays(const std::vector<int64_t>& ids);
 
     // ---- Delta / update methods ----
     void updateNode(int64_t id, const std::string& name,
