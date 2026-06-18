@@ -253,8 +253,8 @@ struct Args {
     int64_t     max_node_id    = 20'000'000'000LL;
     bool        verbose        = false;
     int         queue_size     = 10000;
-    int         node_threads   = 4;
-    int         way_threads    = 8;
+    int         node_threads   = 1;  // RPi5-safe default; see README for tuning
+    int         way_threads    = 6;  // RPi5-safe default; see README for tuning
     // Delta mode
     Mode        mode           = Mode::Import;
     std::string osc_file;                         // for -m delta
@@ -335,8 +335,8 @@ static Args parseArgs(int argc, char** argv) {
                 "    -h                 Show this help and exit\n"
                 "  Import mode (default):\n"
                 "    -i <file.osm.pbf>  Input PBF file\n"
-                "    -t node_threads    (default 4)\n"
-                "    -w way_threads     (default 8)\n"
+                "    -t node_threads    (default 1, see README for tuning)\n"
+                "    -w way_threads     (default 6, see README for tuning)\n"
                 "    -q queue_size      (default 10000)\n"
                 "    -f nodes_file      (default nodes.dat)\n"
                 "    -n max_node_id     (default 20000000000)\n"

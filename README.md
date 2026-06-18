@@ -142,11 +142,14 @@ osmium fileinfo -e planet-latest.osm.pbf | grep "Max ID"
 ./build/osm_import \
   -i planet-latest.osm.pbf \
   -s <your_db_server> -d <your_db> -u <your_user_id> \
-  -t 3 -w 12 \
   -n 20000000000 \
   -f nodes.dat \
   -v -l osm.log
 ```
+
+The defaults (`-t 1 -w 6`) are tuned conservatively for low-power hardware
+such as a Raspberry Pi. On a proper desktop/server, increase both for much
+higher throughput — see [Hardware notes](#hardware-notes) below.
 
 ### Options
 
@@ -156,8 +159,8 @@ osmium fileinfo -e planet-latest.osm.pbf | grep "Max ID"
 | `-s <host>` | PostgreSQL host | required |
 | `-d <db>` | Database name | required |
 | `-u <user>` | Database user | required |
-| `-t <n>` | Node threads | 4 |
-| `-w <n>` | Way threads | 8 |
+| `-t <n>` | Node threads | 1 (see [Hardware notes](#hardware-notes)) |
+| `-w <n>` | Way threads | 6 (see [Hardware notes](#hardware-notes)) |
 | `-q <n>` | Queue size per node thread | 10000 |
 | `-f <file>` | Node mmap file path | `nodes.dat` |
 | `-n <id>` | Max node ID (sizes `nodes.dat`) | 20000000000 |
@@ -353,6 +356,57 @@ A kernel regression in `7.0.0-1011-raspi` (Ubuntu 26.04) causes full system lock
 If you experience lockups during the node phase on other platforms, try reducing `CHUNK_SIZE` further in `OSMMMap.cpp`.
 
 ---
+
+
+## Hardware notes
+
+This importer was originally developed and tuned on a **Raspberry Pi 5**
+with dual NVMe drives attached via PCIe 2.0. That combination turned out to
+be a poor fit for this workload — not because of anything in the import
+logic itself, but because **sustained heavy I/O (large concurrent writes
+during the node phase, large concurrent random reads during ways/relations)
+reliably triggered full system lockups** requiring a hard power cycle. This
+happened across many different phases and code paths, which pointed at a
+platform-level reliability issue (kernel/driver/PCIe-adapter related) rather
+than an application bug.
+
+### What helped on the Pi
+
+- Reducing `CHUNK_SIZE` for the LZ4 shard writer (16MB → 4MB) and adding
+  periodic `fsync`/`msync` calls bounded dirty-page accumulation and fixed
+  lockups during the node phase.
+- Reducing thread counts (`-t 1`, `-w 6`) reduced concurrent I/O pressure and
+  allowed runs to progress significantly further before any instability.
+- None of this fully eliminated the lockups under all conditions — they
+  still occurred at lower frequency, in different phases, as data volume
+  increased.
+
+### Recommended hardware
+
+If you're running this on anything other than a Pi — a normal x86_64
+desktop or server with a proper PCIe 3.0/4.0 NVMe slot — none of the above
+should be necessary, and you can scale thread counts up substantially:
+
+```bash
+./build/osm_import -i planet-latest.osm.pbf -s <host> -d <db> -u <user> \
+  -t 3 -w 12 -n 20000000000 -f nodes.dat -v -l osm.log
+```
+
+Minimum specs for a comfortable full-planet import:
+- **CPU**: any modern 4+ core x86_64 CPU — this workload is I/O-bound, not
+  CPU-bound, so raw core count/clock speed matters far less than storage
+- **RAM**: 16GB minimum, 32GB+ recommended (helps PostgreSQL buffer/cache
+  hit rates and OS page cache for the node mmap file)
+- **Storage**: a real PCIe 3.0 x4 (or better) M.2 NVMe slot, directly on the
+  motherboard — avoid PCIe 2.0 and avoid USB/adapter-based NVMe enclosures
+  for the node store file, since random-access throughput there is the
+  primary bottleneck during the ways/relations phases
+- A second NVMe/SSD for PostgreSQL's data directory, separate from the node
+  store file, is recommended if available
+
+If you do hit instability on non-Pi hardware, the same mitigations apply:
+reduce `-t`/`-w`, and consider shrinking `CHUNK_SIZE` in `OSMMMap.cpp`
+further.
 
 ## Data sources
 
