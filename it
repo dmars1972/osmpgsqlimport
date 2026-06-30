@@ -1,1 +1,0 @@
-nohup ./build/osm_import -i planet-260601.osm.pbf -s rpi16 -d nav -u daniel -t 3 -w 12 -n 20000000000 -f /data/nodes/nodes.dat -R ways -v -l osm.log &
